@@ -1,3 +1,6 @@
+=======
+afterme
+=======
 ## Wat?
 
 This is supposed to end up being a simple append only list datastore with a log file structure (append only). You can think of it as WAL (write ahead log) server.
