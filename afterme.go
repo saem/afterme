@@ -19,60 +19,68 @@ type DataFile interface {
 	Name() string
 }
 type DataFileErrorCode int
+
 const (
-	ALREADY_OPEN    DataFileErrorCode = 1 << iota
+	ALREADY_OPEN DataFileErrorCode = 1 << iota
 	ALREADY_CREATED
 	FILE_CLOSED
 	NO_FILES_FOUND
 )
+
 type DataFileError struct {
 	Name string
 	Code DataFileErrorCode
 }
+
 func (e DataFileError) Error() string {
 	var fmtStr = ""
 	switch {
-		case e.Code == ALREADY_OPEN:
-			fmtStr = "File (%s) already open"
-		case e.Code == ALREADY_CREATED:
-			fmtStr = "File (%s) already created"
-		case e.Code == FILE_CLOSED:
-			fmtStr = "File (%s) closed"
+	case e.Code == ALREADY_OPEN:
+		fmtStr = "File (%s) already open"
+	case e.Code == ALREADY_CREATED:
+		fmtStr = "File (%s) already created"
+	case e.Code == FILE_CLOSED:
+		fmtStr = "File (%s) closed"
 	}
-	
+
 	return fmt.Sprintf(fmtStr, e.Name)
 }
 
 func main() {
 	logger := log.New(os.Stdout, "", log.LstdFlags)
 	dataDir := "./data-dir"
-	//var sequence Sequence = 0
-	
+	var sequence Sequence = 1
+
 	latestFile, err := findLatestFile(dataDir)
-	
+
 	if err != nil {
-		logger.Fatalf("Could not find latest file, error: %s", err.Error())
+		latestFile = newDataFile(sequence, dataDir)
 	}
-	
+
 	err = latestFile.OpenForRead()
 	if err != nil {
-		logger.Fatalf("Could not open file, %s, for reading", latestFile.Name())
+		logger.Fatalf("Could not open file, %s/%s, for reading. because: %s", latestFile.Name(), dataDir, err.Error())
 	}
 	defer latestFile.Close()
-	
+
 	fmt.Printf("We opened, %s,file to find the last sequence\n", latestFile.Name())
+}
+
+// This way whenever a new one needs to be created, call this and the latest version will be used
+func newDataFile(startingSequence Sequence, dataDir string) (df DataFile) {
+	return NewDataFile1(startingSequence, dataDir)
 }
 
 // Log file management/anti-corruption layer between versioned file handling
 
 func findLatestFile(dataDir string) (df DataFile, err error) {
 	fileInfos, err := ioutil.ReadDir(dataDir)
-	if(err != nil) {
+	if err != nil {
 		return nil, err
 	}
 	var sequence Sequence = 0
 	var version Version = Version(0)
-	
+
 	// Find the latest sequence before we start
 	var latestFile os.FileInfo
 	// Look for data files <version>-<sequence>.log, maybe others in the future, version must be first
@@ -80,31 +88,31 @@ func findLatestFile(dataDir string) (df DataFile, err error) {
 		if fileInfo.IsDir() {
 			continue
 		}
-		
+
 		switch {
-			case logFileValidateName1(fileInfo.Name()):
-				var fileStartingSequence Sequence
-				version, fileStartingSequence, err = logFileNameParser1(fileInfo.Name())
-				
-				// This shouldn't be possible because we've validated the file name -- famous last words
-				if err != nil {
-					return nil, err
-				}
-				
-				if fileStartingSequence > sequence {
-					sequence = fileStartingSequence
-					latestFile = fileInfo
-				}
-			default:
-				continue
+		case logFileValidateName1(fileInfo.Name()):
+			var fileStartingSequence Sequence
+			version, fileStartingSequence, err = logFileNameParser1(fileInfo.Name())
+
+			// This shouldn't be possible because we've validated the file name -- famous last words
+			if err != nil {
+				return nil, err
+			}
+
+			if fileStartingSequence > sequence {
+				sequence = fileStartingSequence
+				latestFile = fileInfo
+			}
+		default:
+			continue
 		}
 	}
-	
+
 	switch {
-		case version == Version(1):
-			return DataFileForExisting1(version, sequence, dataDir), nil
+	case version == Version(1):
+		return NewDataFile1(sequence, dataDir), nil
 	}
-	
+
 	return nil, DataFileError{Name: latestFile.Name(), Code: NO_FILES_FOUND}
 }
 
@@ -112,47 +120,47 @@ func findLatestFile(dataDir string) (df DataFile, err error) {
 
 // Data Structures to support version 1 file format
 type dataFile1 struct {
-	version Version
+	version          Version
 	startingSequence Sequence
-	dataDir string
-	file *os.File
+	dataDir          string
+	file             *os.File
 }
 
-func DataFileForExisting1(version Version, startingSequence Sequence, dataDir string) (df *dataFile1) {
+func NewDataFile1(startingSequence Sequence, dataDir string) (df *dataFile1) {
 	df = new(dataFile1)
-	df.version = version
+	df.version = Version(1)
 	df.startingSequence = startingSequence
 	df.dataDir = dataDir
-	
+
 	return df
 }
 
-func (df *dataFile1) CreateForWrite() (err error) {
+func (df dataFile1) CreateForWrite() (err error) {
 	if df.file != nil {
 		return DataFileError{df.Name(), ALREADY_OPEN}
 	}
-	df.file, err = os.OpenFile(df.fullName(), os.O_APPEND | os.O_CREATE | os.O_EXCL, 0644)
-	
+	df.file, err = os.OpenFile(df.fullName(), os.O_APPEND|os.O_CREATE|os.O_EXCL, 0644)
+
 	return err
 }
 
-func (df *dataFile1) OpenForRead() (err error) {
+func (df dataFile1) OpenForRead() (err error) {
 	if df.file != nil {
 		return DataFileError{df.Name(), ALREADY_OPEN}
 	}
 	df.file, err = os.OpenFile(df.fullName(), os.O_RDONLY, 0644)
-	
+
 	return err
 }
 
-func (df *dataFile1) Close() (err error) {
+func (df dataFile1) Close() (err error) {
 	err = nil
 	if df.file != nil {
 		err = df.file.Close()
 	}
-	
+
 	df.file = nil //we only allow reading XOR writing, clearing so we can use it as a mutex
-	
+
 	return err
 }
 
@@ -173,10 +181,10 @@ func logFileValidateName1(fileName string) (valid bool) {
 func logFileNameParser1(fileName string) (version Version, sequence Sequence, err error) {
 	sequenceString := validFileName1.FindStringSubmatch(fileName)[1]
 	currentSequence, err := strconv.ParseUint(sequenceString, 10, 64)
-	
+
 	if err != nil {
 		return Version(0), Sequence(0), fmt.Errorf("Could not parse filename, %s", fileName)
 	}
-	
+
 	return Version(1), Sequence(currentSequence), nil
 }
