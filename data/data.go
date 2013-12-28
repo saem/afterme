@@ -1,6 +1,9 @@
 package data
 
-import "fmt"
+import (
+	"fmt"
+	"encoding"
+)
 
 // Core data types, used in read/writing, and operational observation
 type Sequence uint64
@@ -11,20 +14,23 @@ type DataFile interface {
 	Close() error
 	Name() string
 }
-type DataFileErrorCode int
+type Message interface {
+	encoding.BinaryMarshaler
+}
 
+// Errors
+
+type DataFileErrorCode int
 const (
 	ALREADY_OPEN DataFileErrorCode = 1 << iota
 	ALREADY_CREATED
 	FILE_CLOSED
 	NO_FILES_FOUND
 )
-
 type DataFileError struct {
 	Name string
 	Code DataFileErrorCode
 }
-
 func (e DataFileError) Error() string {
 	var fmtStr = ""
 	switch {

@@ -11,15 +11,15 @@ import (
 // Versioned log file name parsing and validation
 
 // Data Structures to support version 1 file format
-type dataFile1 struct {
+type dataFile struct {
 	version          data.Version
 	startingSequence data.Sequence
 	dataDir          string
 	file             *os.File
 }
 
-func NewDataFile1(startingSequence data.Sequence, dataDir string) (df *dataFile1) {
-	df = new(dataFile1)
+func NewDataFile(startingSequence data.Sequence, dataDir string) (df *dataFile) {
+	df = new(dataFile)
 	df.version = data.Version(1)
 	df.startingSequence = startingSequence
 	df.dataDir = dataDir
@@ -27,7 +27,7 @@ func NewDataFile1(startingSequence data.Sequence, dataDir string) (df *dataFile1
 	return df
 }
 
-func (df dataFile1) CreateForWrite() (err error) {
+func (df dataFile) CreateForWrite() (err error) {
 	if df.file != nil {
 		return data.DataFileError{df.Name(), data.ALREADY_OPEN}
 	}
@@ -36,7 +36,7 @@ func (df dataFile1) CreateForWrite() (err error) {
 	return err
 }
 
-func (df dataFile1) OpenForRead() (err error) {
+func (df dataFile) OpenForRead() (err error) {
 	if df.file != nil {
 		return data.DataFileError{df.Name(), data.ALREADY_OPEN}
 	}
@@ -45,7 +45,7 @@ func (df dataFile1) OpenForRead() (err error) {
 	return err
 }
 
-func (df dataFile1) Close() (err error) {
+func (df dataFile) Close() (err error) {
 	err = nil
 	if df.file != nil {
 		err = df.file.Close()
@@ -56,22 +56,22 @@ func (df dataFile1) Close() (err error) {
 	return err
 }
 
-func (df dataFile1) Name() string {
+func (df dataFile) Name() string {
 	return fmt.Sprintf("%d-%d.log", df.version, df.startingSequence)
 }
 
-func (df dataFile1) fullName() string {
+func (df dataFile) fullName() string {
 	return fmt.Sprintf("%s/%s", df.dataDir, df.Name())
 }
 
-var validFileName1 = regexp.MustCompile(`^1-(\d+).log$`)
+var validFileName = regexp.MustCompile(`^1-(\d+).log$`)
 
-func LogFileValidateName1(fileName string) (valid bool) {
-	return validFileName1.MatchString(fileName)
+func LogFileValidateName(fileName string) (valid bool) {
+	return validFileName.MatchString(fileName)
 }
 
-func LogFileNameParser1(fileName string) (version data.Version, sequence data.Sequence, err error) {
-	sequenceString := validFileName1.FindStringSubmatch(fileName)[1]
+func LogFileNameParser(fileName string) (version data.Version, sequence data.Sequence, err error) {
+	sequenceString := validFileName.FindStringSubmatch(fileName)[1]
 	currentSequence, err := strconv.ParseUint(sequenceString, 10, 64)
 
 	if err != nil {
@@ -79,4 +79,17 @@ func LogFileNameParser1(fileName string) (version data.Version, sequence data.Se
 	}
 
 	return data.Version(1), data.Sequence(currentSequence), nil
+}
+
+type Message struct {
+	Sequence data.Sequence
+	TimeStamp int64
+	MessageSize uint32
+	//@todo add the integrity hash
+	Body []byte
+}
+
+func (message Message) MarshalBinary() (data []byte, err error) {
+	header := fmt.Sprintf("%d-%d-%d\n", message.Sequence, message.TimeStamp, message.MessageSize)
+	return append([]byte(header), message.Body...), nil
 }
