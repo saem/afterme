@@ -5,81 +5,69 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"regexp"
-	"strconv"
+	"github.com/saem/afterme/data"
+	"github.com/saem/afterme/data1"
+	"net/http"
 )
 
-// Core data types, used in read/writing, and operational observation
-type Sequence uint64
-type Version uint64
-type DataFile interface {
-	CreateForWrite() error
-	OpenForRead() error
-	Close() error
-	Name() string
-}
-type DataFileErrorCode int
-
-const (
-	ALREADY_OPEN DataFileErrorCode = 1 << iota
-	ALREADY_CREATED
-	FILE_CLOSED
-	NO_FILES_FOUND
-)
-
-type DataFileError struct {
-	Name string
-	Code DataFileErrorCode
-}
-
-func (e DataFileError) Error() string {
-	var fmtStr = ""
-	switch {
-	case e.Code == ALREADY_OPEN:
-		fmtStr = "File (%s) already open"
-	case e.Code == ALREADY_CREATED:
-		fmtStr = "File (%s) already created"
-	case e.Code == FILE_CLOSED:
-		fmtStr = "File (%s) closed"
-	}
-
-	return fmt.Sprintf(fmtStr, e.Name)
+type App struct {
+	Sequence data.Sequence
+	Version data.Version
+	DataDir string
 }
 
 func main() {
+	app := App{Sequence: 1, Version: 1, DataDir: "./data-dir"}
 	logger := log.New(os.Stdout, "", log.LstdFlags)
-	dataDir := "./data-dir"
-	var sequence Sequence = 1
-
-	latestFile, err := findLatestFile(dataDir)
+	
+	latestFile, err := findLatestFile(app.DataDir)
 
 	if err != nil {
-		latestFile = newDataFile(sequence, dataDir)
+		latestFile = data1.NewDataFile1(app.Sequence, app.DataDir)
 	}
 
 	err = latestFile.OpenForRead()
 	if err != nil {
-		logger.Fatalf("Could not open file, %s/%s, for reading. because: %s", latestFile.Name(), dataDir, err.Error())
+		logger.Fatalf("Could not open file, %s/%s, for reading. because: %s",
+			      latestFile.Name(),
+			      app.DataDir,
+		err.Error())
 	}
 	defer latestFile.Close()
 
-	fmt.Printf("We opened, %s,file to find the last sequence\n", latestFile.Name())
+	fmt.Printf("We opened, %s, to find the last sequence\n", latestFile.Name())
+	
+	// TODO: determine the starting sequence
+	
+	http.HandleFunc("/message", messageHandler)
+	http.HandleFunc("/status", statusHandler)
+	http.HandleFunc("/health", healthHandler)
+	http.HandleFunc("/", http.NotFound)
+	http.ListenAndServe("localhost:4000", nil)
+	
 }
 
-// This way whenever a new one needs to be created, call this and the latest version will be used
-func newDataFile(startingSequence Sequence, dataDir string) (df DataFile) {
-	return NewDataFile1(startingSequence, dataDir)
+func messageHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Let's pretend we wrote some data.")
+}
+
+func statusHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Return the current status.")
+}
+
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Return the result of health checks.")
 }
 
 // Log file management/anti-corruption layer between versioned file handling
 
-func findLatestFile(dataDir string) (df DataFile, err error) {
+func findLatestFile(dataDir string) (df data.DataFile, err error) {
 	fileInfos, err := ioutil.ReadDir(dataDir)
 	if err != nil {
 		return nil, err
 	}
-	var sequence Sequence = 0
-	var version Version = Version(0)
+	var sequence data.Sequence = 0
+	var version data.Version = data.Version(0)
 
 	// Find the latest sequence before we start
 	var latestFile os.FileInfo
@@ -90,9 +78,9 @@ func findLatestFile(dataDir string) (df DataFile, err error) {
 		}
 
 		switch {
-		case logFileValidateName1(fileInfo.Name()):
-			var fileStartingSequence Sequence
-			version, fileStartingSequence, err = logFileNameParser1(fileInfo.Name())
+		case data1.LogFileValidateName1(fileInfo.Name()):
+			var fileStartingSequence data.Sequence
+			version, fileStartingSequence, err = data1.LogFileNameParser1(fileInfo.Name())
 
 			// This shouldn't be possible because we've validated the file name -- famous last words
 			if err != nil {
@@ -109,82 +97,9 @@ func findLatestFile(dataDir string) (df DataFile, err error) {
 	}
 
 	switch {
-	case version == Version(1):
-		return NewDataFile1(sequence, dataDir), nil
+	case version == data.Version(1):
+		return data1.NewDataFile1(sequence, dataDir), nil
 	}
 
-	return nil, DataFileError{Name: latestFile.Name(), Code: NO_FILES_FOUND}
-}
-
-// Versioned log file name parsing and validation
-
-// Data Structures to support version 1 file format
-type dataFile1 struct {
-	version          Version
-	startingSequence Sequence
-	dataDir          string
-	file             *os.File
-}
-
-func NewDataFile1(startingSequence Sequence, dataDir string) (df *dataFile1) {
-	df = new(dataFile1)
-	df.version = Version(1)
-	df.startingSequence = startingSequence
-	df.dataDir = dataDir
-
-	return df
-}
-
-func (df dataFile1) CreateForWrite() (err error) {
-	if df.file != nil {
-		return DataFileError{df.Name(), ALREADY_OPEN}
-	}
-	df.file, err = os.OpenFile(df.fullName(), os.O_APPEND|os.O_CREATE|os.O_EXCL, 0644)
-
-	return err
-}
-
-func (df dataFile1) OpenForRead() (err error) {
-	if df.file != nil {
-		return DataFileError{df.Name(), ALREADY_OPEN}
-	}
-	df.file, err = os.OpenFile(df.fullName(), os.O_RDONLY, 0644)
-
-	return err
-}
-
-func (df dataFile1) Close() (err error) {
-	err = nil
-	if df.file != nil {
-		err = df.file.Close()
-	}
-
-	df.file = nil //we only allow reading XOR writing, clearing so we can use it as a mutex
-
-	return err
-}
-
-func (df dataFile1) Name() string {
-	return fmt.Sprintf("%d-%d.log", df.version, df.startingSequence)
-}
-
-func (df dataFile1) fullName() string {
-	return fmt.Sprintf("%s/%s", df.dataDir, df.Name())
-}
-
-var validFileName1 = regexp.MustCompile(`^1-(\d+).log$`)
-
-func logFileValidateName1(fileName string) (valid bool) {
-	return validFileName1.MatchString(fileName)
-}
-
-func logFileNameParser1(fileName string) (version Version, sequence Sequence, err error) {
-	sequenceString := validFileName1.FindStringSubmatch(fileName)[1]
-	currentSequence, err := strconv.ParseUint(sequenceString, 10, 64)
-
-	if err != nil {
-		return Version(0), Sequence(0), fmt.Errorf("Could not parse filename, %s", fileName)
-	}
-
-	return Version(1), Sequence(currentSequence), nil
+	return nil, data.DataFileError{Name: latestFile.Name(), Code: data.NO_FILES_FOUND}
 }
