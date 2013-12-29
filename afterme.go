@@ -22,17 +22,29 @@ type App struct {
 	Sequence data.Sequence
 	Version data.Version
 	DataDir string
-	DataWriter chan data.Message
+	DataWriter chan WriteRequest
+	logger *log.Logger
+}
+
+type WriteRequest struct {
+	Body []byte
+	Notify chan WriteResponse
+}
+
+type WriteResponse struct {
+	Sequence data.Sequence
+	Notify chan WriteResponse
+	Err error
 }
 
 var app = new(App)
 
 func main() {
-	app.Sequence = 1
+	app.Sequence = 0
 	app.Version = 1
 	app.DataDir = "./data-dir"
-	app.DataWriter = make(chan data.Message, MaxWriteBufferSize)
-	logger := log.New(os.Stdout, "", log.LstdFlags)
+	app.DataWriter = make(chan WriteRequest, MaxWriteBufferSize)
+	app.logger = log.New(os.Stdout, "", log.LstdFlags)
 	
 	latestFile, err := findLatestFile(app.DataDir)
 
@@ -42,7 +54,7 @@ func main() {
 
 	err = latestFile.OpenForRead()
 	if err != nil {
-		logger.Fatalf("Could not open file, %s/%s, for reading. because: %s",
+		app.logger.Fatalf("Could not open file, %s/%s, for reading. because: %s",
 			      latestFile.Name(),
 			      app.DataDir,
 		err.Error())
@@ -52,8 +64,10 @@ func main() {
 	fmt.Printf("We opened, %s, to find the last sequence\n", latestFile.Name())
 	
 	// TODO: determine the starting sequence
-	go dataProcess(app)
 	
+	go app.ProcessMessages()
+	
+	// TODO: Move this into an http server interface
 	http.HandleFunc("/message", messageHandler)
 	http.HandleFunc("/status", statusHandler)
 	http.HandleFunc("/health", healthHandler)
@@ -61,20 +75,52 @@ func main() {
 	http.ListenAndServe("localhost:4000", nil)
 }
 
-func dataProcess(app *App) {
+func (app *App) ProcessMessages() {
 	writeCoalesceTimeout := time.Tick(WriteCoalescingTimeout)
+	var writeResponses []WriteResponse
+	var writeRequest WriteRequest
 	for {
 		select {
-		case <- app.DataWriter:
-			fmt.Println("Received a message")
+		case writeRequest = <- app.DataWriter:
+			app.Sequence++
+			
+			// This part should probably be controlled by the file format
+			
+			message := data1.Message{ Sequence: app.Sequence, 
+				TimeStamp: time.Now().Unix(), 
+				MessageSize: uint32(len(writeRequest.Body)), 
+				Body: writeRequest.Body}
+
+			header, body, err := message.Marshal()
+			if err != nil {
+				app.logger.Panicf("Marshalling error, this should never have happened")
+			}
+			
+			fmt.Printf("Received a message, header: %sbody: %s\n", header, body)
+			
+			// The last thing we do is append, effectively marking the end of the transaction
+			writeResponses = append(writeResponses, WriteResponse{Sequence: message.Sequence,
+				Notify: writeRequest.Notify,
+				Err: nil})
+			
 		case <- writeCoalesceTimeout:
 			fmt.Println("Write coalescing timeout")
+			fmt.Println("Pretend we called flush")
+			for _, writeResponse := range writeResponses {
+				// TODO: handle case where the Notify channel is closed
+				writeResponse.Notify <- writeResponse
+			}
+			
+			writeResponses = make([]WriteResponse, 0)
 		}
 	}
 }
 
-func writeToLog(message data.Message) {
-	app.DataWriter <- message
+func (app *App) RequestWrite(Body []byte) (notifier chan WriteResponse) {
+	notifier = make(chan WriteResponse)
+	request := WriteRequest{Body: Body, Notify: notifier}
+	app.DataWriter <- request
+	return notifier
 }
 
 func messageHandler(w http.ResponseWriter, r *http.Request) {
@@ -94,9 +140,13 @@ func messageHandler(w http.ResponseWriter, r *http.Request) {
 	
 	r.Body.Close()
 	
-	message := data1.Message{Sequence: 1, TimeStamp: time.Now().Unix(), MessageSize: uint32(bytesRead), Body: body}
-	
-	go writeToLog(message)
+	notifier := app.RequestWrite(body)
+	writeResponse := <- notifier
+	if writeResponse.Err != nil {
+		fmt.Fprintf(w, "Something went wrong when writing")
+	} else {
+		fmt.Fprintf(w, "Successfully written, sequence: %s", writeResponse.Sequence)
+	}
 }
 
 func statusHandler(w http.ResponseWriter, r *http.Request) {
