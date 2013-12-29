@@ -2,10 +2,10 @@ package data1
 
 import (
 	"fmt"
+	"github.com/saem/afterme/data"
 	"os"
 	"regexp"
 	"strconv"
-	"github.com/saem/afterme/data"
 )
 
 // Versioned log file name parsing and validation
@@ -82,8 +82,8 @@ func LogFileNameParser(fileName string) (version data.Version, sequence data.Seq
 }
 
 type Message struct {
-	Sequence data.Sequence
-	TimeStamp int64
+	Sequence    data.Sequence
+	TimeStamp   int64
 	MessageSize uint32
 	//@todo add the integrity hash
 	Body []byte

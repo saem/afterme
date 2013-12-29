@@ -2,26 +2,26 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
-	"log"
-	"os"
 	"github.com/saem/afterme/data"
 	"github.com/saem/afterme/data1"
-	"net/http"
 	"io"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"os"
 	"time"
 )
 
 const (
-	MaxMessageSize = 50 * 1024 * 1024 // Bytes
-	MaxWriteBufferSize = 100 //MaxMessageSize * MaxWriteBufferSize ~ total memory consumption
+	MaxMessageSize         = 50 * 1024 * 1024 // Bytes
+	MaxWriteBufferSize     = 100              //MaxMessageSize * MaxWriteBufferSize ~ total memory consumption
 	WriteCoalescingTimeout = 1000 * 2 * time.Millisecond
 )
 
 type App struct {
-	Sequence data.Sequence
-	Version data.Version
-	DataDir string
+	Sequence   data.Sequence
+	Version    data.Version
+	DataDir    string
 	DataWriter chan data.Message
 }
 
@@ -33,7 +33,7 @@ func main() {
 	app.DataDir = "./data-dir"
 	app.DataWriter = make(chan data.Message, MaxWriteBufferSize)
 	logger := log.New(os.Stdout, "", log.LstdFlags)
-	
+
 	latestFile, err := findLatestFile(app.DataDir)
 
 	if err != nil {
@@ -43,17 +43,17 @@ func main() {
 	err = latestFile.OpenForRead()
 	if err != nil {
 		logger.Fatalf("Could not open file, %s/%s, for reading. because: %s",
-			      latestFile.Name(),
-			      app.DataDir,
-		err.Error())
+			latestFile.Name(),
+			app.DataDir,
+			err.Error())
 	}
 	defer latestFile.Close()
 
 	fmt.Printf("We opened, %s, to find the last sequence\n", latestFile.Name())
-	
+
 	// TODO: determine the starting sequence
 	go dataProcess(app)
-	
+
 	http.HandleFunc("/message", messageHandler)
 	http.HandleFunc("/status", statusHandler)
 	http.HandleFunc("/health", healthHandler)
@@ -65,9 +65,9 @@ func dataProcess(app *App) {
 	writeCoalesceTimeout := time.Tick(WriteCoalescingTimeout)
 	for {
 		select {
-		case <- app.DataWriter:
+		case <-app.DataWriter:
 			fmt.Println("Received a message")
-		case <- writeCoalesceTimeout:
+		case <-writeCoalesceTimeout:
 			fmt.Println("Write coalescing timeout")
 		}
 	}
@@ -81,21 +81,21 @@ func messageHandler(w http.ResponseWriter, r *http.Request) {
 	if r.ContentLength < 0 || r.ContentLength > MaxMessageSize {
 		fmt.Fprintf(w, "Do some HTTP error code stuff")
 	}
-	
+
 	var body []byte
 	bytesRead, err := r.Body.Read(body)
-	
+
 	if err != nil && err != io.EOF {
 		fmt.Fprintf(w, "Do some HTTP error code stuff, got and error: %s", err.Error())
 	}
 	if bytesRead != int(r.ContentLength) {
 		fmt.Fprintf(w, "Do some HTTP error code stuff, content length incorrect")
 	}
-	
+
 	r.Body.Close()
-	
+
 	message := data1.Message{Sequence: 1, TimeStamp: time.Now().Unix(), MessageSize: uint32(bytesRead), Body: body}
-	
+
 	go writeToLog(message)
 }
 
