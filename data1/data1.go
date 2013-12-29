@@ -89,7 +89,7 @@ type Message struct {
 	Body []byte
 }
 
-func (message Message) MarshalBinary() (data []byte, err error) {
-	header := fmt.Sprintf("%d-%d-%d\n", message.Sequence, message.TimeStamp, message.MessageSize)
-	return append([]byte(header), message.Body...), nil
+func (message Message) Marshal() (header string, body []byte, err error) {
+	header = fmt.Sprintf("%d-%d-%d\n", message.Sequence, message.TimeStamp, message.MessageSize)
+	return header, message.Body, nil
 }

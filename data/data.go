@@ -2,7 +2,6 @@ package data
 
 import (
 	"fmt"
-	"encoding"
 )
 
 // Core data types, used in read/writing, and operational observation
@@ -15,7 +14,7 @@ type DataFile interface {
 	Name() string
 }
 type Message interface {
-	encoding.BinaryMarshaler
+	Marshal() (header string, body []byte, err error)
 }
 
 // Errors
