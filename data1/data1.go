@@ -16,6 +16,20 @@ type dataFile struct {
 	startingSequence data.Sequence
 	dataDir          string
 	file             *os.File
+	bytesWritten     uint32
+}
+
+type Message struct {
+	Sequence    data.Sequence
+	TimeStamp   int64
+	MessageSize uint32
+	//@todo add the integrity hash
+	Body []byte
+}
+
+func (message Message) Marshal() (header string, body []byte, err error) {
+	header = fmt.Sprintf("%d-%d-%d\n", message.Sequence, message.TimeStamp, message.MessageSize)
+	return header, message.Body, nil
 }
 
 func NewDataFile(startingSequence data.Sequence, dataDir string) (df *dataFile) {
@@ -53,17 +67,23 @@ func (df dataFile) Write(message data.Message) (err error) {
 
 	// TODO: properly handle write errors
 
-	_, err = df.file.Write([]byte(header))
+	bytesWritten, err := df.file.Write([]byte(header))
+	df.bytesWritten += uint32(bytesWritten)
 	if err != nil {
 		return err
 	}
 
-	_, err = df.file.Write(body)
+	bytesWritten, err = df.file.Write(body)
+	df.bytesWritten += uint32(bytesWritten)
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func (df dataFile) BytesWritten() (bytes uint32) {
+	return df.bytesWritten
 }
 
 func (df dataFile) Sync() (err error) {
@@ -75,7 +95,7 @@ func (df dataFile) Close() (err error) {
 		err = df.file.Close()
 	}
 
-	df.file = nil //we only allow reading XOR writing, clearing so we can use it as a mutex
+	df.file = nil //we only allow reading XOR writing
 
 	return err
 }
@@ -103,17 +123,4 @@ func LogFileNameParser(fileName string) (version data.Version, sequence data.Seq
 	}
 
 	return data.Version(1), data.Sequence(currentSequence), nil
-}
-
-type Message struct {
-	Sequence    data.Sequence
-	TimeStamp   int64
-	MessageSize uint32
-	//@todo add the integrity hash
-	Body []byte
-}
-
-func (message Message) Marshal() (header string, body []byte, err error) {
-	header = fmt.Sprintf("%d-%d-%d\n", message.Sequence, message.TimeStamp, message.MessageSize)
-	return header, message.Body, nil
 }

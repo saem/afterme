@@ -14,6 +14,7 @@ type DataFile interface {
 	Name() string
 	Write(message Message) (err error)
 	Sync() (err error)
+	BytesWritten() (bytes uint32)
 }
 type Message interface {
 	Marshal() (header string, body []byte, err error)
