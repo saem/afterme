@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/saem/afterme/app"
 	"io"
+	"io/ioutil"
 	"net/http"
 )
 
@@ -31,8 +32,8 @@ func messageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body []byte
-	bytesRead, err := r.Body.Read(body)
+	body, err := ioutil.ReadAll(r.Body)
+	bytesRead := len(body)
 
 	if err != nil && err != io.EOF {
 		msg := fmt.Sprintf("Unanticipated error ocurred while reading the request body: %s", err.Error())
@@ -51,8 +52,6 @@ func messageHandler(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-
-	r.Body.Close()
 
 	notifier := appServer.RequestWrite(body)
 	writeResponse := <-notifier
