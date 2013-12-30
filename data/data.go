@@ -12,6 +12,7 @@ type DataFile interface {
 	OpenForRead() error
 	Close() error
 	Name() string
+	Write(message Message) (err error)
 }
 type Message interface {
 	Marshal() (header string, body []byte, err error)

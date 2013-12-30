@@ -25,17 +25,31 @@ func Start(addr string, a *app.App) (err error) {
 // A write
 func messageHandler(w http.ResponseWriter, r *http.Request) {
 	if r.ContentLength < 0 || r.ContentLength > app.MaxMessageSize {
-		fmt.Fprintf(w, "Do some HTTP error code stuff")
+		msg := fmt.Sprintf("Content-Length header required, and no bigger than: %db", app.MaxMessageSize)
+		http.Error(w, msg, http.StatusLengthRequired)
+
+		return
 	}
 
 	var body []byte
 	bytesRead, err := r.Body.Read(body)
 
 	if err != nil && err != io.EOF {
-		fmt.Fprintf(w, "Do some HTTP error code stuff, got and error: %s", err.Error())
+		msg := fmt.Sprintf("Unanticipated error ocurred while reading the request body: %s", err.Error())
+		http.Error(w, msg, http.StatusBadRequest)
+
+		return
 	}
 	if bytesRead != int(r.ContentLength) {
-		fmt.Fprintf(w, "Do some HTTP error code stuff, content length incorrect")
+		msg := fmt.Sprintf("Content-Length %d b, does not match body length %d b", r.ContentLength, bytesRead)
+		http.Error(w, msg, http.StatusPreconditionFailed)
+
+		return
+	}
+	if bytesRead == 0 {
+		http.Error(w, "Empty body", http.StatusPreconditionFailed)
+
+		return
 	}
 
 	r.Body.Close()

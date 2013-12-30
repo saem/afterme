@@ -45,6 +45,27 @@ func (df dataFile) OpenForRead() (err error) {
 	return err
 }
 
+func (df dataFile) Write(message data.Message) (err error) {
+	header, body, err := message.Marshal()
+	if err != nil {
+		return err
+	}
+
+	// TODO: properly handle write errors
+
+	_, err = df.file.Write([]byte(header))
+	if err != nil {
+		return err
+	}
+
+	_, err = df.file.Write(body)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (df dataFile) Close() (err error) {
 	err = nil
 	if df.file != nil {

@@ -22,6 +22,7 @@ type App struct {
 	DataDir    string
 	DataWriter chan WriteRequest
 	Logger     *log.Logger
+	dataFile   data.DataFile
 }
 
 // Creates a properly initialized App instance
@@ -32,6 +33,15 @@ func CreateAppServer(dataDir string, logger *log.Logger, sequence data.Sequence)
 	appServer.DataDir = dataDir
 	appServer.DataWriter = make(chan WriteRequest, MaxWriteBufferSize)
 	appServer.Logger = logger
+	appServer.dataFile = data1.NewDataFile(appServer.Sequence, appServer.DataDir)
+
+	err := appServer.dataFile.CreateForWrite()
+	if err != nil {
+		appServer.Logger.Fatalf("Could not open file, %s/%s, for writing. because: %s",
+			appServer.dataFile.Name(),
+			appServer.DataDir,
+			err.Error())
+	}
 
 	return appServer
 }
@@ -74,14 +84,12 @@ func (app *App) ProcessMessages() {
 				MessageSize: uint32(len(writeRequest.Body)),
 				Body:        writeRequest.Body}
 
-			header, body, err := message.Marshal()
+			err := app.dataFile.Write(message)
 			if err != nil {
-				app.Logger.Panicf("Marshalling error, this should never have happened")
+				app.Logger.Panicf("Write error, WTF: %s", err.Error())
 			}
 
 			app.Sequence++
-
-			fmt.Printf("Received a message, header: %sbody: %s\n", header, body)
 
 			// The last thing we do is append, effectively marking the end of the transaction
 			writeResponses = append(writeResponses, WriteResponse{Sequence: message.Sequence,
