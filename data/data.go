@@ -13,6 +13,7 @@ type DataFile interface {
 	Close() error
 	Name() string
 	Write(message Message) (err error)
+	Sync() (err error)
 }
 type Message interface {
 	Marshal() (header string, body []byte, err error)

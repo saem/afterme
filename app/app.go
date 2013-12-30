@@ -63,7 +63,10 @@ type WriteResponse struct {
 // Call this to enqueue a new write to the log
 func (app *App) RequestWrite(Body []byte) (notifier chan WriteResponse) {
 	notifier = make(chan WriteResponse)
-	request := WriteRequest{Body: Body, Notify: notifier}
+
+	// We add a new line to body to ensure that the next header cleanly starts on the new line
+	request := WriteRequest{Body: append(Body, '\n'), Notify: notifier}
+
 	app.DataWriter <- request
 	return notifier
 }
@@ -99,6 +102,7 @@ func (app *App) ProcessMessages() {
 		case <-writeCoalesceTimeout:
 			fmt.Println("Write coalescing timeout")
 			fmt.Println("Pretend we called flush")
+			app.dataFile.Sync()
 			for _, writeResponse := range writeResponses {
 				// TODO: handle case where the Notify channel is closed
 				writeResponse.Notify <- writeResponse
@@ -107,4 +111,6 @@ func (app *App) ProcessMessages() {
 			writeResponses = make([]WriteResponse, 0)
 		}
 	}
+
+	app.dataFile.Close()
 }

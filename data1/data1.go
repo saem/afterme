@@ -27,16 +27,16 @@ func NewDataFile(startingSequence data.Sequence, dataDir string) (df *dataFile) 
 	return df
 }
 
-func (df dataFile) CreateForWrite() (err error) {
+func (df *dataFile) CreateForWrite() (err error) {
 	if df.file != nil {
 		return data.DataFileError{df.Name(), data.ALREADY_OPEN}
 	}
-	df.file, err = os.OpenFile(df.fullName(), os.O_APPEND|os.O_CREATE|os.O_EXCL, 0644)
+	df.file, err = os.OpenFile(df.fullName(), os.O_APPEND|os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
 
 	return err
 }
 
-func (df dataFile) OpenForRead() (err error) {
+func (df *dataFile) OpenForRead() (err error) {
 	if df.file != nil {
 		return data.DataFileError{df.Name(), data.ALREADY_OPEN}
 	}
@@ -66,8 +66,11 @@ func (df dataFile) Write(message data.Message) (err error) {
 	return nil
 }
 
+func (df dataFile) Sync() (err error) {
+	return df.file.Sync()
+}
+
 func (df dataFile) Close() (err error) {
-	err = nil
 	if df.file != nil {
 		err = df.file.Close()
 	}
