@@ -7,7 +7,7 @@ This is supposed to end up being a simple append only list datastore with a log 
 
 ## Why?
 
-The thinking goes that this is a useful primitive in creating command (before taking action) and event (after action has been taken) logs that application developers can use to do things like provide total orders, CQRS, event sourcing, application level replication or maybe they just want a logging server with a few more guarntees.
+The thinking goes that this is a useful primitive in creating command (before taking action) and event (after action has been taken) logs that application developers can use to do things like provide total orders, CQRS, event sourcing, application level replication or maybe they just want a logging server with a few more guarantees.
 
 ## How?
 
