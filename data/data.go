@@ -20,16 +20,19 @@ type Message interface {
 // Errors
 
 type DataFileErrorCode int
+
 const (
 	ALREADY_OPEN DataFileErrorCode = 1 << iota
 	ALREADY_CREATED
 	FILE_CLOSED
 	NO_FILES_FOUND
 )
+
 type DataFileError struct {
 	Name string
 	Code DataFileErrorCode
 }
+
 func (e DataFileError) Error() string {
 	var fmtStr = ""
 	switch {
@@ -42,4 +45,4 @@ func (e DataFileError) Error() string {
 	}
 
 	return fmt.Sprintf(fmtStr, e.Name)
-} 
+}
