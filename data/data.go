@@ -1,6 +1,7 @@
 package data
 
 import (
+	"bufio"
 	"fmt"
 )
 
@@ -9,7 +10,7 @@ type Sequence uint64
 type Version uint64
 type DataFile interface {
 	CreateForWrite() error
-	OpenForRead() error
+	OpenForRead() (scanner *bufio.Scanner, err error)
 	Close() error
 	Name() string
 	Write(message Message) (err error)
@@ -18,6 +19,7 @@ type DataFile interface {
 }
 type Message interface {
 	Marshal() (header string, body []byte, err error)
+	Unmarshal(header string, body []byte) (err error)
 }
 
 // Errors

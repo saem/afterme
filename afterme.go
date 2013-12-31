@@ -22,18 +22,22 @@ func main() {
 		latestFile = data1.NewDataFile(sequence, dataDir)
 	}
 
-	err = latestFile.OpenForRead()
+	scanner, err := latestFile.OpenForRead()
 	if err != nil {
 		logger.Fatalf("Could not open file, %s/%s, for reading. because: %s",
 			latestFile.Name(),
 			dataDir,
 			err.Error())
 	}
+
+	for i := 0; scanner.Scan(); i++ {
+		// Every odd row is a header
+		if i%2 == 0 {
+			sequence = data1.MessageFromHeader(scanner.Text()).Sequence
+		}
+	}
+
 	defer latestFile.Close()
-
-	fmt.Printf("We opened, %s, to find the last sequence\n", latestFile.Name())
-
-	// TODO: determine the starting sequence, and start the appServer there
 
 	var appServer = app.CreateAppServer(dataDir, logger, sequence)
 

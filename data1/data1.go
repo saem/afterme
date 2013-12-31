@@ -1,6 +1,7 @@
 package data1
 
 import (
+	"bufio"
 	"fmt"
 	"github.com/saem/afterme/data"
 	"os"
@@ -10,7 +11,12 @@ import (
 
 // Versioned log file name parsing and validation
 
+const (
+	MaxHeaderSize = 20 + 1 + 20 + 1 + 10 + 1 + 28 // bytes
+)
+
 // Data Structures to support version 1 file format
+
 type dataFile struct {
 	version          data.Version
 	startingSequence data.Sequence
@@ -31,7 +37,19 @@ type Message struct {
 // this should be removed on reads
 func (message Message) Marshal() (header string, body []byte, err error) {
 	header = fmt.Sprintf("%d-%d-%d-%s\n", message.Sequence, message.TimeStamp, message.MessageSize, message.Hash)
-	return header, append(message.Body, '\n'), nil
+	return header, message.Body, nil
+}
+
+func (message Message) Unmarshal(header string, body []byte) (err error) {
+	m := MessageFromHeader(header)
+
+	message.Sequence = m.Sequence
+	message.TimeStamp = m.TimeStamp
+	message.MessageSize = m.MessageSize
+	message.Hash = m.Hash
+	message.Body = body
+
+	return nil
 }
 
 func NewDataFile(startingSequence data.Sequence, dataDir string) (df *dataFile) {
@@ -52,13 +70,13 @@ func (df *dataFile) CreateForWrite() (err error) {
 	return err
 }
 
-func (df *dataFile) OpenForRead() (err error) {
+func (df *dataFile) OpenForRead() (scanner *bufio.Scanner, err error) {
 	if df.file != nil {
-		return data.DataFileError{df.Name(), data.ALREADY_OPEN}
+		return nil, data.DataFileError{df.Name(), data.ALREADY_OPEN}
 	}
 	df.file, err = os.OpenFile(df.fullName(), os.O_RDONLY, 0644)
 
-	return err
+	return df.scanner(), err
 }
 
 func (df dataFile) Write(message data.Message) (err error) {
@@ -82,6 +100,75 @@ func (df dataFile) Write(message data.Message) (err error) {
 	}
 
 	return nil
+}
+
+func (df dataFile) scanner() (scanner *bufio.Scanner) {
+	if df.file == nil {
+		fmt.Errorf("For some reason the file pointer is nil")
+	}
+
+	scanner = bufio.NewScanner(df.file)
+	parseHeader := true
+	var header string
+	split := func(data []byte, atEOF bool) (advance int, token []byte, err error) {
+		if parseHeader {
+			advance, token, err = bufio.ScanLines(data, atEOF)
+			if err == nil && token != nil {
+				if !validateMessageHeader(string(token)) {
+					err = fmt.Errorf("Malformed header: %s", string(token))
+					return
+				} else {
+					header = string(token)
+					parseHeader = false // alternate parsing logic
+				}
+			}
+		} else {
+			var messageSize uint64
+			messageSizeString := validMessageHeader.FindStringSubmatch(header)[3]
+			messageSize, err = strconv.ParseUint(messageSizeString, 10, 32)
+			if err != nil {
+				err = fmt.Errorf("Could not parse message size from header")
+				return
+			}
+
+			if uint64(len(data)) < messageSize {
+				advance = 0
+				token = nil
+			} else {
+				token = data[:messageSize]
+				advance = int(messageSize)
+				parseHeader = true // alternate parsing logic
+			}
+		}
+
+		return
+	}
+	scanner.Split(split)
+
+	return
+}
+
+var validMessageHeader = regexp.MustCompile(`^(\d+)-(\d+)-(\d+)-([a-zA-Z0-9=+/]+)$`)
+
+func MessageFromHeader(header string) (message Message) {
+	matches := validMessageHeader.FindStringSubmatch(header)
+
+	// TODO: Throw panic on errors
+	sequence, _ := strconv.ParseUint(matches[1], 10, 64)
+	timeStamp, _ := strconv.ParseInt(matches[2], 10, 64)
+	messageSize, _ := strconv.ParseUint(matches[3], 10, 32)
+
+	// TODO: handle strconv
+	message = Message{Sequence: data.Sequence(sequence),
+		TimeStamp:   timeStamp,
+		MessageSize: uint32(messageSize),
+		Hash:        matches[4]}
+
+	return
+}
+
+func validateMessageHeader(header string) (valid bool) {
+	return validMessageHeader.MatchString(header)
 }
 
 func (df dataFile) BytesWritten() (bytes uint32) {

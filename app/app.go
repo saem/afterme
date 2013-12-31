@@ -15,7 +15,7 @@ const (
 	MaxMessageSize         = 50 * 1024 * 1024 // Bytes
 	MaxWriteBufferSize     = 100              //MaxMessageSize * MaxWriteBufferSize ~ total memory consumption
 	MaxResponseBufferSize  = MaxWriteBufferSize
-	WriteCoalescingTimeout = 1000 * 2 * time.Millisecond
+	WriteCoalescingTimeout = 5 * time.Millisecond
 	MaxBytesPerFile        = 1024 * 1024 * 1024 //Default 1GB, soft limit
 )
 
@@ -62,6 +62,9 @@ func (app *App) RequestWrite(Body []byte) (notifier chan WriteResponse) {
 	notifier = make(chan WriteResponse)
 
 	// We add a new line to body to ensure that the next header cleanly starts on the new line
+	if Body[len(Body)-1] != '\n' {
+		Body = append(Body, '\n')
+	}
 	request := WriteRequest{Body: Body, Notify: notifier}
 
 	app.DataWriter <- request
