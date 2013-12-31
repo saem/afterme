@@ -23,13 +23,15 @@ type Message struct {
 	Sequence    data.Sequence
 	TimeStamp   int64
 	MessageSize uint32
-	//@todo add the integrity hash
-	Body []byte
+	Hash        string
+	Body        []byte
 }
 
+// Marshal creates a header string, and a []byte to be write to disk, it mutates the body by appending a '\n',
+// this should be removed on reads
 func (message Message) Marshal() (header string, body []byte, err error) {
-	header = fmt.Sprintf("%d-%d-%d\n", message.Sequence, message.TimeStamp, message.MessageSize)
-	return header, message.Body, nil
+	header = fmt.Sprintf("%d-%d-%d-%s\n", message.Sequence, message.TimeStamp, message.MessageSize, message.Hash)
+	return header, append(message.Body, '\n'), nil
 }
 
 func NewDataFile(startingSequence data.Sequence, dataDir string) (df *dataFile) {

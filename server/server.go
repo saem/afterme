@@ -54,11 +54,11 @@ func messageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	notifier := appServer.RequestWrite(body)
-	writeResponse := <-notifier
-	if writeResponse.Err != nil {
+	wr := <-notifier
+	if wr.Err != nil {
 		fmt.Fprintf(w, "Something went wrong when writing")
 	} else {
-		fmt.Fprintf(w, "Successfully written, sequence: %s", writeResponse.Sequence)
+		fmt.Fprintf(w, "Successfully written, sequence: %s, sha1: %s", wr.Sequence, wr.Hash)
 	}
 }
 

@@ -1,6 +1,8 @@
 package app
 
 import (
+	"crypto/sha1"
+	"encoding/base64"
 	"fmt"
 	"github.com/saem/afterme/data"
 	"github.com/saem/afterme/data1"
@@ -50,6 +52,7 @@ type WriteRequest struct {
 // WriteResponse struct sent back to notify a requester of a write as to what happened
 type WriteResponse struct {
 	Sequence data.Sequence
+	Hash     string
 	Notify   chan WriteResponse
 	Err      error
 }
@@ -59,7 +62,7 @@ func (app *App) RequestWrite(Body []byte) (notifier chan WriteResponse) {
 	notifier = make(chan WriteResponse)
 
 	// We add a new line to body to ensure that the next header cleanly starts on the new line
-	request := WriteRequest{Body: append(Body, '\n'), Notify: notifier}
+	request := WriteRequest{Body: Body, Notify: notifier}
 
 	app.DataWriter <- request
 	return notifier
@@ -126,9 +129,14 @@ func (app *App) ProcessMessages() {
 		case writeRequest := <-app.DataWriter:
 			// This part should probably be controlled by the file format
 
+			h := sha1.New()
+			h.Write(writeRequest.Body)
+			hash := base64.StdEncoding.EncodeToString(h.Sum(nil))
+
 			message := data1.Message{Sequence: app.Sequence,
 				TimeStamp:   time.Now().Unix(),
 				MessageSize: uint32(len(writeRequest.Body)),
+				Hash:        hash,
 				Body:        writeRequest.Body}
 
 			var writeResponse WriteResponse
@@ -144,6 +152,7 @@ func (app *App) ProcessMessages() {
 			} else {
 				// The last thing we do is append, effectively marking the end of the transaction
 				writeResponse = WriteResponse{Sequence: message.Sequence,
+					Hash:   message.Hash,
 					Notify: writeRequest.Notify,
 					Err:    nil}
 
