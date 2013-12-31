@@ -36,6 +36,7 @@ func main() {
 			sequence = data1.MessageFromHeader(scanner.Text()).Sequence
 		}
 	}
+	sequence++
 
 	defer latestFile.Close()
 
