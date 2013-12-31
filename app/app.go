@@ -11,6 +11,7 @@ import (
 )
 
 // TODO: These should be defaults for config read off the App struct
+
 const (
 	MaxMessageSize         = 50 * 1024 * 1024 // Bytes
 	MaxWriteBufferSize     = 100              //MaxMessageSize * MaxWriteBufferSize ~ total memory consumption
@@ -19,7 +20,7 @@ const (
 	MaxBytesPerFile        = 1024 * 1024 * 1024 //Default 1GB, soft limit
 )
 
-// App is the protocol agnostic core of the application
+// App is the protocol agnostic core of the application.
 type App struct {
 	Sequence   data.Sequence
 	Version    data.Version
@@ -29,7 +30,7 @@ type App struct {
 	dataFile   data.DataFile
 }
 
-// CreateAppServer creates a properly initialized App instance
+// CreateAppServer creates a properly initialized App instance.
 func CreateAppServer(dataDir string, logger *log.Logger, sequence data.Sequence) (appServer *App) {
 	appServer = new(App)
 	appServer.Sequence = sequence
@@ -42,37 +43,8 @@ func CreateAppServer(dataDir string, logger *log.Logger, sequence data.Sequence)
 	return appServer
 }
 
-// WriteRequest is sent this to the App.DataWriter channel to request that Body is written,
-// and a notification (WriteResponse) sent via WriteRequest.Notify
-type WriteRequest struct {
-	Body   []byte
-	Notify chan WriteResponse
-}
-
-// WriteResponse struct sent back to notify a requester of a write as to what happened
-type WriteResponse struct {
-	Sequence data.Sequence
-	Hash     string
-	Notify   chan WriteResponse
-	Err      error
-}
-
-// RequestWrite lines up a piece of data to be written to the data log
-func (app *App) RequestWrite(Body []byte) (notifier chan WriteResponse) {
-	notifier = make(chan WriteResponse)
-
-	// We add a new line to body to ensure that the next header cleanly starts on the new line
-	if Body[len(Body)-1] != '\n' {
-		Body = append(Body, '\n')
-	}
-	request := WriteRequest{Body: Body, Notify: notifier}
-
-	app.DataWriter <- request
-	return notifier
-}
-
 // createFile creates the actual file, on the file system, for writing.
-// This should probably be put into the data1 package
+// This should probably be put into the data1 package.
 func (app *App) createFile() {
 	if app.dataFile != nil {
 		err := app.dataFile.Close()
@@ -92,6 +64,37 @@ func (app *App) createFile() {
 	}
 }
 
+// WriteRequest is sent this to the App.DataWriter channel to request that Body is written,
+// and a notification (WriteResponse) sent via WriteRequest.Notify.
+type WriteRequest struct {
+	Body   []byte
+	Notify chan WriteResponse
+}
+
+// RequestWrite lines up a piece of data to be written to the data log,
+// data not ending in a '\n' will have one added.
+func (app *App) RequestWrite(Body []byte) (notifier chan WriteResponse) {
+	notifier = make(chan WriteResponse)
+
+	// We add a new line to body to ensure that the next header cleanly starts on the new line
+	if Body[len(Body)-1] != '\n' {
+		Body = append(Body, '\n')
+	}
+	request := WriteRequest{Body: Body, Notify: notifier}
+
+	app.DataWriter <- request
+	return notifier
+}
+
+// WriteResponse struct sent back to notify a requester of a write as to what happened.
+type WriteResponse struct {
+	Sequence data.Sequence
+	Hash     string
+	Notify   chan WriteResponse
+	Err      error
+}
+
+// WriteResponseBuffer is used to keep track of unacknowledged writes.
 type WriteResponseBuffer struct {
 	buf         []WriteResponse
 	outstanding uint32
@@ -106,7 +109,7 @@ func createResponseBuffer() (buf *WriteResponseBuffer) {
 	return buf
 }
 
-// buffer is meant to buffer a write response, and return an error when the buffer is full
+// buffer is meant to buffer a WriteResponse, returns an error when an insertion fills the buffer
 func (buf *WriteResponseBuffer) buffer(res WriteResponse) (err error) {
 	buf.buf[buf.outstanding] = res
 	buf.outstanding++
@@ -175,7 +178,7 @@ func (app *App) ProcessMessages() {
 	app.dataFile.Close()
 }
 
-// flushResponses syncs and informs all pending requests that their data is "safe"
+// flushResponses syncs and informs all pending requests that their data is "safe", completing WriteResponses
 func (app *App) flushResponses(writeResponses *WriteResponseBuffer) {
 	app.dataFile.Sync()
 	for i := uint32(0); i < writeResponses.outstanding; i++ {

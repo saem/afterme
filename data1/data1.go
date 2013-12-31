@@ -11,12 +11,9 @@ import (
 
 // Versioned log file name parsing and validation
 
-const (
-	MaxHeaderSize = 20 + 1 + 20 + 1 + 10 + 1 + 28 // bytes
-)
-
 // Data Structures to support version 1 file format
 
+// dataFile is an *os.File and associated metadata for a given data file.
 type dataFile struct {
 	version          data.Version
 	startingSequence data.Sequence
@@ -25,6 +22,7 @@ type dataFile struct {
 	bytesWritten     uint32
 }
 
+// Message represents an entry in the dataFile, consisting of metadata (header) and the data (body).
 type Message struct {
 	Sequence    data.Sequence
 	TimeStamp   int64
@@ -33,13 +31,24 @@ type Message struct {
 	Body        []byte
 }
 
-// Marshal creates a header string, and a []byte to be write to disk, it mutates the body by appending a '\n',
-// this should be removed on reads
+// NewDataFile is how you create a valid instance of a version 1 dataFile, nothing on disk will be created
+// that's taken care of by CreateForWrite and OpenForRead.
+func NewDataFile(startingSequence data.Sequence, dataDir string) (df *dataFile) {
+	df = new(dataFile)
+	df.version = data.Version(1)
+	df.startingSequence = startingSequence
+	df.dataDir = dataDir
+
+	return df
+}
+
+// Marshal creates a header string, and a []byte to be written to disk.
 func (message Message) Marshal() (header string, body []byte, err error) {
 	header = fmt.Sprintf("%d-%d-%d-%s\n", message.Sequence, message.TimeStamp, message.MessageSize, message.Hash)
 	return header, message.Body, nil
 }
 
+// Unmarshal takes a header and a body and sets the values to the data therein, this is an inverse of Marshal
 func (message Message) Unmarshal(header string, body []byte) (err error) {
 	m := MessageFromHeader(header)
 
@@ -52,15 +61,11 @@ func (message Message) Unmarshal(header string, body []byte) (err error) {
 	return nil
 }
 
-func NewDataFile(startingSequence data.Sequence, dataDir string) (df *dataFile) {
-	df = new(dataFile)
-	df.version = data.Version(1)
-	df.startingSequence = startingSequence
-	df.dataDir = dataDir
+// TODO: consider hiding CreateForWrite and OpenForRead behind two separate NewDataFile functions, that
+//       build a dataFile for either purpose, stops it form being partially initialized.
 
-	return df
-}
-
+// CreateForWrite creates the actual on disk file, and opens it for writing. An error is produced if a file
+// is already open, or if the file exists.
 func (df *dataFile) CreateForWrite() (err error) {
 	if df.file != nil {
 		return data.DataFileError{df.Name(), data.ALREADY_OPEN}
@@ -70,15 +75,7 @@ func (df *dataFile) CreateForWrite() (err error) {
 	return err
 }
 
-func (df *dataFile) OpenForRead() (scanner *bufio.Scanner, err error) {
-	if df.file != nil {
-		return nil, data.DataFileError{df.Name(), data.ALREADY_OPEN}
-	}
-	df.file, err = os.OpenFile(df.fullName(), os.O_RDONLY, 0644)
-
-	return df.scanner(), err
-}
-
+// Write takes a Marshal()'d Message to disk and writes it to a file, errors are thrown if the file write fails.
 func (df dataFile) Write(message data.Message) (err error) {
 	header, body, err := message.Marshal()
 	if err != nil {
@@ -102,6 +99,19 @@ func (df dataFile) Write(message data.Message) (err error) {
 	return nil
 }
 
+// OpenForRead opens a file for reading. An error is produced if a file is already open, or if the file does
+// not exist.
+func (df *dataFile) OpenForRead() (scanner *bufio.Scanner, err error) {
+	if df.file != nil {
+		return nil, data.DataFileError{df.Name(), data.ALREADY_OPEN}
+	}
+	df.file, err = os.OpenFile(df.fullName(), os.O_RDONLY, 0644)
+
+	return df.scanner(), err
+}
+
+// scanner returns a scanner which allows for reading a file sequentially, returning alternating lines between
+// header and body
 func (df dataFile) scanner() (scanner *bufio.Scanner) {
 	if df.file == nil {
 		fmt.Errorf("For some reason the file pointer is nil")
@@ -148,9 +158,11 @@ func (df dataFile) scanner() (scanner *bufio.Scanner) {
 	return
 }
 
-var validMessageHeader = regexp.MustCompile(`^(\d+)-(\d+)-(\d+)-([a-zA-Z0-9=+/]+)$`)
-
+// MessageFromHeader produces a Message based on a header string, which must be valid
 func MessageFromHeader(header string) (message Message) {
+
+	// TODO: Add an error return for an invalid header string, or strconv issues
+
 	matches := validMessageHeader.FindStringSubmatch(header)
 
 	// TODO: Throw panic on errors
@@ -167,6 +179,10 @@ func MessageFromHeader(header string) (message Message) {
 	return
 }
 
+// validMessageHeader is a regexp that can be used to validate a message header
+var validMessageHeader = regexp.MustCompile(`^(\d+)-(\d+)-(\d+)-([a-zA-Z0-9=+/]+)$`)
+
+// validateMessageHeader
 func validateMessageHeader(header string) (valid bool) {
 	return validMessageHeader.MatchString(header)
 }
@@ -203,6 +219,8 @@ func LogFileValidateName(fileName string) (valid bool) {
 	return validFileName.MatchString(fileName)
 }
 
+// LogFileNameParser parses out the version and sequence from a log file name, returning an error if the name
+// is invalid.
 func LogFileNameParser(fileName string) (version data.Version, sequence data.Sequence, err error) {
 	sequenceString := validFileName.FindStringSubmatch(fileName)[1]
 	currentSequence, err := strconv.ParseUint(sequenceString, 10, 64)
