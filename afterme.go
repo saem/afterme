@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/saem/afterme/app"
 	"github.com/saem/afterme/data"
 	"github.com/saem/afterme/data1"
