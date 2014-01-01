@@ -20,6 +20,7 @@ func main() {
 	if err != nil {
 		latestFile = data1.NewDataFile(sequence, dataDir)
 	}
+	sequence++
 
 	scanner, err := latestFile.OpenForRead()
 	if err != nil {
@@ -35,7 +36,6 @@ func main() {
 			sequence = data1.MessageFromHeader(scanner.Text()).Sequence
 		}
 	}
-	sequence++
 
 	defer latestFile.Close()
 
