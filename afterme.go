@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/saem/afterme/app"
 	"github.com/saem/afterme/data"
 	"github.com/saem/afterme/data1"
@@ -13,7 +12,7 @@ import (
 
 func main() {
 	dataDir := "./data-dir"
-	logger := log.New(os.Stdout, "", log.LstdFlags)
+	logger := log.New(os.Stdout, "", log.Llongfile | log.LstdFlags )
 	sequence := data.Sequence(1)
 
 	latestFile, err := findLatestFile(dataDir)
