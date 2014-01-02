@@ -69,7 +69,7 @@ func findLatestSequence(dataDir string, logger *log.Logger) (sequence data.Seque
 		}
 		sequence++
 	}
-	
+
 	return
 }
 
@@ -83,8 +83,6 @@ func findLatestFile(dataDir string) (df data.DataFile, err error) {
 	var sequence data.Sequence = 0
 	var version data.Version = data.Version(0)
 
-	// Find the latest sequence before we start
-	var latestFile os.FileInfo
 	// Look for data files <version>-<sequence>.log, maybe others in the future, version must be first
 	for _, fileInfo := range fileInfos {
 		if fileInfo.IsDir() {
@@ -103,7 +101,6 @@ func findLatestFile(dataDir string) (df data.DataFile, err error) {
 
 			if fileStartingSequence > sequence {
 				sequence = fileStartingSequence
-				latestFile = fileInfo
 			}
 		default:
 			continue
@@ -115,5 +112,5 @@ func findLatestFile(dataDir string) (df data.DataFile, err error) {
 		return data1.NewDataFile(sequence, dataDir), nil
 	}
 
-	return nil, data.DataFileError{Name: latestFile.Name(), Code: data.NO_FILES_FOUND}
+	return nil, data.DataFileError{Name: "", Code: data.NO_FILES_FOUND}
 }

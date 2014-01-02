@@ -50,7 +50,7 @@ func TestResponseTime(t *testing.T) {
 	totalRequests := 100
 
 	before := time.Now().UnixNano()
-	for iterations := 0 ; iterations < 10 ; iterations++ {
+	for iterations := 0; iterations < 10; iterations++ {
 		success := 0
 		failure := 0
 
@@ -58,7 +58,7 @@ func TestResponseTime(t *testing.T) {
 			go post(client, payload, successChannel)
 		}
 
-		for success + failure < totalRequests {
+		for success+failure < totalRequests {
 			status := <-successChannel
 			if status {
 				success++
@@ -78,15 +78,15 @@ func TestResponseTime(t *testing.T) {
 }
 
 func post(client *http.Client, payload string, successChannel chan bool) {
-        status := false
-        resp, err := client.Post("http://localhost:4001/message", "application/json", strings.NewReader(payload))
-        if err != nil {
-                fmt.Println(err)
-        }
-        resp.Body.Close()
-        if http.StatusOK == resp.StatusCode {
-                status = true
-        }
+	status := false
+	resp, err := client.Post("http://localhost:4001/message", "application/json", strings.NewReader(payload))
+	if err != nil {
+		fmt.Println(err)
+	}
+	resp.Body.Close()
+	if http.StatusOK == resp.StatusCode {
+		status = true
+	}
 
-        successChannel <- status
+	successChannel <- status
 }
