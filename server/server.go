@@ -8,6 +8,10 @@ import (
 	"net/http"
 )
 
+const (
+	DefaultPort = 4000
+)
+
 // Package private instance that the handler methods use
 var appServer *app.App = nil
 

@@ -13,6 +13,7 @@ import (
 // TODO: These should be defaults for config read off the App struct
 
 const (
+	DefaultDataDir         = "./data-dir"
 	MaxMessageSize         = 50 * 1024 * 1024 // Bytes
 	MaxWriteBufferSize     = 100              //MaxMessageSize * MaxWriteBufferSize ~ total memory consumption
 	MaxResponseBufferSize  = MaxWriteBufferSize
@@ -58,8 +59,8 @@ func (app *App) createFile() {
 	err := app.dataFile.CreateForWrite()
 	if err != nil {
 		app.Logger.Fatalf("Could not open file, %s/%s, for writing. because: %s",
-			app.dataFile.Name(),
 			app.DataDir,
+			app.dataFile.Name(),
 			err.Error())
 	}
 }
