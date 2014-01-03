@@ -47,10 +47,10 @@ func TestResponseTime(t *testing.T) {
 
 	successChannel := make(chan bool)
 	client := &http.Client{}
-	totalRequests := 100
 
 	before := time.Now().UnixNano()
 	for iterations := 0; iterations < 10; iterations++ {
+		totalRequests := 100
 		success := 0
 		failure := 0
 
@@ -72,7 +72,7 @@ func TestResponseTime(t *testing.T) {
 		}
 	}
 	after := (time.Now().UnixNano() - before) / 1000 / 1000
-	if after > 280 {
+	if after > 120 {
 		t.Error("Something is broken, or test misconfigured, but it's taking more than 280ms for a 10 iterations by 100 concurrent request run")
 	}
 }
@@ -81,8 +81,12 @@ func post(client *http.Client, payload string, successChannel chan bool) {
 	status := false
 	resp, err := client.Post("http://localhost:4001/message", "application/json", strings.NewReader(payload))
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println(err.Error())
+		successChannel <- status
+		
+		return
 	}
+	
 	resp.Body.Close()
 	if http.StatusOK == resp.StatusCode {
 		status = true
