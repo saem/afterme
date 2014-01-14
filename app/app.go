@@ -189,7 +189,7 @@ func (app *App) flushResponses(writeResponses *WriteResponseBuffer) {
 		copy(oldResponses.buf, writeResponses.buf)
 		writeResponses.outstanding = 0
 
-		go func () {
+		go func() {
 			err := app.dataFile.Sync()
 			if err != nil {
 				app.Logger.Fatalf("butts, it broke on sync: %s", err.Error())

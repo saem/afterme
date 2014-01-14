@@ -6,19 +6,26 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 )
 
 var appendedArgs = false
+var serverInited = false
 
-func TestResponseTime(t *testing.T) {
+func initServer(args []string) {
+	if !serverInited {
+		go notStupidMain(args)
+		serverInited = true
+	}
+}
+
+func BenchmarkResponseTime(b *testing.B) {
 	dataDir := "./test-data-dir"
 	args := []string{"afterme", fmt.Sprintf("-datadir=%s", dataDir), "-port=4001"}
 
 	os.RemoveAll(dataDir)
 	os.Mkdir(dataDir, 0700) // Ignore directory exist errors
 
-	go notStupidMain(args)
+	initServer(args)
 
 	payload := `[
     {
@@ -47,9 +54,9 @@ func TestResponseTime(t *testing.T) {
 
 	successChannel := make(chan bool)
 	client := &http.Client{}
+	b.ResetTimer()
 
-	before := time.Now().UnixNano()
-	for iterations := 0; iterations < 10; iterations++ {
+	for iterations := 0; iterations < b.N; iterations++ {
 		totalRequests := 100
 		success := 0
 		failure := 0
@@ -68,12 +75,8 @@ func TestResponseTime(t *testing.T) {
 		}
 
 		if success != totalRequests {
-			t.Error("All requests not successful, %s/%s", success, totalRequests)
+			b.Error("All requests not successful, %s/%s", success, totalRequests)
 		}
-	}
-	after := (time.Now().UnixNano() - before) / 1000 / 1000
-	if after > 120 {
-		t.Error("Something is broken, or test misconfigured, but it's taking more than 280ms for a 10 iterations by 100 concurrent request run")
 	}
 }
 
@@ -83,10 +86,10 @@ func post(client *http.Client, payload string, successChannel chan bool) {
 	if err != nil {
 		fmt.Println(err.Error())
 		successChannel <- status
-		
+
 		return
 	}
-	
+
 	resp.Body.Close()
 	if http.StatusOK == resp.StatusCode {
 		status = true
